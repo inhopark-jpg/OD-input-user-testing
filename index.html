@@ -156,7 +156,7 @@
         const zoomOutBtn = document.getElementById('zoom-out-btn');
 
         myLocationBtn.addEventListener('click', () => {
-            map.flyTo(OSONG_CENTER, map.getZoom(), {
+            map.flyTo(OSONG_CENTER, 16, {
                 animate: true,
                 duration: 0.6
             });
