@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>오송 버스 호출</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <link rel="stylesheet" href="common.css?v=2">
+</head>
+
+<body class="bg-gray-100 relative">
+
+    <!-- Map -->
+    <div id="map"></div>
+
+    <!-- FIXED CENTER PIN (Overlay) -->
+    <div id="center-pin">
+        <svg id="center-pin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#DC2626" stroke="white"
+            stroke-width="1.5" class="w-12 h-12">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" />
+            <circle cx="12" cy="9" r="3" fill="white" />
+        </svg>
+        <!-- Error Tooltip for outside service area -->
+        <div id="center-pin-tooltip"
+            class="absolute bottom-1 left-1/2 -translate-x-1/2 translate-y-0 bg-red-500 text-white text-sm px-4 py-2 rounded-lg font-bold shadow-lg whitespace-nowrap opacity-0 pointer-events-none transition-opacity duration-300">
+            서비스 지역이 아닙니다
+            <!-- Arrow pointing down -->
+            <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-red-500 rotate-45"></div>
+        </div>
+        <!-- Shadow dot -->
+        <div class="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-1 bg-black opacity-20 rounded-full blur-[2px]">
+        </div>
+    </div>
+
+    <!-- Input Panel (Compact Version) -->
+    <div class="floating-panel absolute top-4 left-4 right-4 bg-white rounded-xl shadow-lg p-3 flex flex-col gap-2">
+        <!-- Origin -->
+        <div class="flex items-center gap-3 bg-gray-50 p-2 rounded-lg border border-gray-100">
+            <div class="text-blue-600"><i class="ph-fill ph-navigation-arrow text-lg"></i></div>
+            <div class="flex-1">
+                <label class="block text-[10px] font-bold text-gray-400 uppercase leading-tight">출발지</label>
+                <input type="text" value="오송역 (현재 위치)"
+                    class="w-full bg-transparent outline-none text-gray-800 font-medium text-sm leading-tight" readonly>
+            </div>
+        </div>
+
+        <!-- Destination -->
+        <div class="flex items-center gap-3 bg-white p-2 rounded-lg ring-1 ring-black shadow-sm">
+            <div class="text-red-600"><i class="ph-fill ph-map-pin text-lg"></i></div>
+            <div class="flex-1">
+                <label class="block text-[10px] font-bold text-gray-400 uppercase leading-tight">도착지</label>
+                <input type="text" id="dest-input" placeholder="지도를 움직여 정류장 선택"
+                    class="w-full bg-transparent outline-none text-gray-800 font-medium text-sm leading-tight" readonly>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast"
+        class="floating-panel absolute top-40 left-1/2 transform -translate-x-1/2 bg-black text-white text-xs px-4 py-2 rounded-full opacity-0 transition-opacity duration-300 pointer-events-none whitespace-nowrap z-[2000]">
+        가장 가까운 정류장으로 설정됨
+    </div>
+
+    <!-- Error Toast (For button click) -->
+    <div id="error-toast"
+        class="floating-panel absolute bottom-24 left-1/2 transform -translate-x-1/2 bg-red-500 text-white text-sm px-6 py-3 rounded-full opacity-0 transition-opacity duration-300 pointer-events-none whitespace-nowrap font-bold shadow-lg z-[2000]">
+        정류장을 선택해주세요
+    </div>
+
+    <!-- Zoom Controls -->
+    <div class="floating-panel absolute bottom-28 right-4 flex flex-col gap-2">
+        <button id="zoom-in-btn"
+            class="w-12 h-12 bg-white text-gray-800 font-bold rounded-xl text-2xl transition-all shadow-lg hover:bg-gray-50 active:scale-95 flex items-center justify-center">
+            <i class="ph-bold ph-plus"></i>
+        </button>
+        <button id="zoom-out-btn"
+            class="w-12 h-12 bg-white text-gray-800 font-bold rounded-xl text-2xl transition-all shadow-lg hover:bg-gray-50 active:scale-95 flex items-center justify-center">
+            <i class="ph-bold ph-minus"></i>
+        </button>
+    </div>
+
+    <!-- Bottom Action Button -->
+    <div class="floating-panel absolute bottom-8 left-4 right-4">
+        <button id="action-btn"
+            class="w-full bg-blue-600 text-white font-bold py-4 rounded-xl text-lg transition-all shadow-lg shadow-blue-200 btn-disabled">
+            도착지 선택
+        </button>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <script>
+        // 0. Global State & Elements
+        const destInput = document.getElementById('dest-input');
+        const toast = document.getElementById('toast');
+        const errorToast = document.getElementById('error-toast');
+        const actionBtn = document.getElementById('action-btn');
+        const centerPinIcon = document.getElementById('center-pin-icon');
+        const centerPinTooltip = document.getElementById('center-pin-tooltip');
+        const body = document.body;
+        let isSnapping = false;
+        let currentSelectedStop = null;
+        let serviceAreaPolygon = null; // Will store the boundary polygon
+
+        function showToast(msg) {
+            toast.innerText = msg || "가장 가까운 정류장으로 설정됨";
+            toast.style.opacity = '1';
+            setTimeout(() => toast.style.opacity = '0', 2000);
+        }
+
+        function showErrorToast() {
+            errorToast.style.opacity = '1';
+            setTimeout(() => errorToast.style.opacity = '0', 2000);
+        }
+
+        function updateButtonState(isValid) {
+            if (isValid) {
+                actionBtn.classList.remove('btn-disabled');
+                actionBtn.classList.add('hover:bg-blue-700', 'active:scale-95');
+            } else {
+                actionBtn.classList.add('btn-disabled');
+                actionBtn.classList.remove('hover:bg-blue-700', 'active:scale-95');
+            }
+        }
+
+        actionBtn.addEventListener('click', () => {
+            if (actionBtn.classList.contains('btn-disabled')) {
+                showErrorToast();
+            } else {
+                showToast("도착지가 선택되었습니다!");
+            }
+        });
+
+        // Zoom Controls
+        const zoomInBtn = document.getElementById('zoom-in-btn');
+        const zoomOutBtn = document.getElementById('zoom-out-btn');
+
+        zoomInBtn.addEventListener('click', () => {
+            map.zoomIn();
+        });
+
+        zoomOutBtn.addEventListener('click', () => {
+            map.zoomOut();
+        });
+
+
+        // 1. Configuration: Osong-eup Center (Osong Station)
+        const OSONG_CENTER = [36.6345, 127.2964];
+
+        const map = L.map('map', {
+            zoomControl: false,
+            center: OSONG_CENTER,
+            zoom: 15,
+            scrollWheelZoom: 'center',
+            touchZoom: 'center',
+            doubleClickZoom: 'center'
+        });
+
+        L.tileLayer('https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}{r}.{ext}', {
+            minZoom: 0,
+            maxZoom: 20,
+            attribution: '&copy; <a href="https://www.stadiamaps.com/" target="_blank">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            ext: 'png'
+        }).addTo(map);
+
+        const currentLocationIcon = L.divIcon({
+            className: 'current-location-marker',
+            iconSize: [20, 20],
+            iconAnchor: [10, 10]
+        });
+
+        L.marker(OSONG_CENTER, { icon: currentLocationIcon, zIndexOffset: 100 }).addTo(map);
+
+
+        // 2. Data Loading & Map Logic
+        let busStops = [];
+        let leafletMarkers = [];
+        const busLayer = L.layerGroup().addTo(map);
+        let maskLayer = null;
+        let boundaryLayer = null;
+
+        const busStopIcon = L.divIcon({
+            html: '<img src="bus_stop_marker.svg" class="bus-stop-img">',
+            className: 'bus-stop-wrapper',
+            iconSize: [32, 32],
+            iconAnchor: [16, 16]
+        });
+
+        Promise.all([
+            fetch('osong_service_area/osong_bus_stops.geojson').then(res => res.json()),
+            fetch('osong_service_area/osong_boundary.geojson').then(res => res.json())
+        ]).then(([stopsData, boundaryData]) => {
+            // Process Bus Stops
+            busStops = stopsData.features.map(f => ({
+                lat: f.geometry.coordinates[1],
+                lng: f.geometry.coordinates[0],
+                name: f.properties.정류장명
+            }));
+
+            busStops.forEach((stop) => {
+                const marker = L.marker([stop.lat, stop.lng], { icon: busStopIcon }).addTo(busLayer);
+                leafletMarkers.push(marker);
+
+                marker.on('click', () => {
+                    isSnapping = true;
+                    destInput.value = stop.name;
+                    currentSelectedStop = stop;
+                    updateButtonState(true);
+
+                    map.flyTo([stop.lat, stop.lng], 16, {
+                        animate: true,
+                        duration: 0.6
+                    });
+                    showToast();
+                });
+            });
+
+            // Process Boundary
+            const boundaryCoords = boundaryData.features[0].geometry.coordinates;
+
+            // Create Mask Layer (Gray outside)
+            const worldPolygon = [
+                [90, -180],
+                [90, 180],
+                [-90, 180],
+                [-90, -180]
+            ];
+
+            // GeoJSON coordinates are [lng, lat], Leaflet needs [lat, lng]
+            const serviceAreaRing = boundaryCoords[0][0].map(coord => [coord[1], coord[0]]);
+
+            // Store for point-in-polygon checks
+            serviceAreaPolygon = serviceAreaRing;
+
+            maskLayer = L.polygon([worldPolygon, serviceAreaRing], {
+                color: 'transparent',
+                fillColor: '#808080',
+                fillOpacity: 0.5,
+                interactive: false
+            });
+
+            // Create Boundary Layer (Blue inside)
+            boundaryLayer = L.polygon(serviceAreaRing, {
+                color: '#2563EB', // Blue-600
+                weight: 2,
+                fillColor: '#3B82F6', // Blue-500
+                fillOpacity: 0.2
+            });
+
+            boundaryLayer.bindTooltip("청주 오송", {
+                permanent: true,
+                direction: "center",
+                className: "service-area-label",
+                interactive: true
+            });
+
+            const zoomToServiceArea = () => {
+                if (map.getZoom() < 14) {
+                    const bounds = boundaryLayer.getBounds();
+                    const center = bounds.getCenter();
+                    // Ensure we zoom in to at least 14.5 to show markers/mask
+                    const fitZoom = map.getBoundsZoom(bounds, { padding: [50, 50] });
+                    const targetZoom = Math.max(fitZoom, 14.5);
+
+                    map.flyTo(center, targetZoom, {
+                        duration: 0.45,
+                        animate: true
+                    });
+                }
+            };
+
+            boundaryLayer.on('click', zoomToServiceArea);
+
+            // Also attach to tooltip if possible, though interactive: true on tooltip usually bubbles to layer
+            const tooltip = boundaryLayer.getTooltip();
+            if (tooltip) {
+                tooltip.on('click', zoomToServiceArea);
+            }
+
+            // Initial Update
+            updateMapVisuals();
+        }).catch(err => console.error("Error loading data:", err));
+
+        // ** Zoom Level Visibility Logic **
+        function updateMapVisuals() {
+            const currentZoom = map.getZoom();
+            const centerPin = document.getElementById('center-pin');
+
+            if (currentZoom < 14) {
+                // Zoomed OUT: Show Blue Boundary, Hide Markers, Hide Gray Mask, Hide Center Pin
+                if (boundaryLayer && !map.hasLayer(boundaryLayer)) {
+                    map.addLayer(boundaryLayer);
+                    boundaryLayer.bringToFront();
+                }
+                if (maskLayer && map.hasLayer(maskLayer)) {
+                    map.removeLayer(maskLayer);
+                }
+
+                // Hide center pin
+                if (centerPin) {
+                    centerPin.style.opacity = '0';
+                    centerPin.style.pointerEvents = 'none';
+                }
+
+                // Fade out markers
+                leafletMarkers.forEach(marker => marker.setOpacity(0));
+                setTimeout(() => {
+                    if (map.hasLayer(busLayer)) map.removeLayer(busLayer);
+                }, 300);
+
+            } else {
+                // Zoomed IN: Hide Blue Boundary, Show Markers, Show Gray Mask, Show Center Pin
+                if (boundaryLayer && map.hasLayer(boundaryLayer)) {
+                    map.removeLayer(boundaryLayer);
+                }
+                if (maskLayer && !map.hasLayer(maskLayer)) {
+                    map.addLayer(maskLayer);
+                    maskLayer.bringToBack(); // Ensure mask is behind markers
+                }
+
+                // Show center pin
+                if (centerPin) {
+                    centerPin.style.opacity = '1';
+                    centerPin.style.pointerEvents = 'none';
+                }
+
+                if (!map.hasLayer(busLayer)) map.addLayer(busLayer);
+                leafletMarkers.forEach(marker => marker.setOpacity(1));
+            }
+        }
+
+        map.on('zoomend', updateMapVisuals);
+
+
+        function findNearestStop(latlng) {
+            let nearest = null;
+            let minDist = Infinity;
+            busStops.forEach(stop => {
+                const stopLatLng = L.latLng(stop.lat, stop.lng);
+                const dist = latlng.distanceTo(stopLatLng);
+                if (dist < minDist) {
+                    minDist = dist;
+                    nearest = stop;
+                }
+            });
+            return nearest;
+        }
+
+        // Check if a point is inside the service area polygon
+        function isPointInPolygon(point, polygon) {
+            if (!polygon) return true; // If polygon not loaded yet, assume inside
+
+            const x = point.lat;
+            const y = point.lng;
+            let inside = false;
+
+            for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+                const xi = polygon[i][0], yi = polygon[i][1];
+                const xj = polygon[j][0], yj = polygon[j][1];
+
+                const intersect = ((yi > y) !== (yj > y))
+                    && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+                if (intersect) inside = !inside;
+            }
+
+            return inside;
+        }
+
+        // Update center pin appearance based on location
+        function updateCenterPin(isInside) {
+            if (isInside) {
+                // Show red pin, hide tooltip
+                centerPinIcon.style.opacity = '1';
+                centerPinTooltip.style.opacity = '0';
+            } else {
+                // Hide red pin, show error tooltip
+                centerPinIcon.style.opacity = '0';
+                centerPinTooltip.style.opacity = '1';
+            }
+        }
+
+
+        map.on('movestart', () => {
+            if (!isSnapping) {
+                body.classList.add('is-moving');
+                const currentZoom = map.getZoom();
+                if (currentZoom < 14) {
+                    destInput.value = "";
+                    destInput.placeholder = "서비스 권역을 선택해 주세요";
+                } else {
+                    destInput.value = "위치 설정 중...";
+                }
+                currentSelectedStop = null;
+                updateButtonState(false);
+            }
+        });
+
+        map.on('moveend', () => {
+            body.classList.remove('is-moving');
+
+            if (isSnapping) {
+                isSnapping = false;
+                return;
+            }
+
+            const currentZoom = map.getZoom();
+
+            // If zoomed out, don't allow bus stop selection
+            if (currentZoom < 14) {
+                currentSelectedStop = null;
+                updateButtonState(false);
+                destInput.value = "";
+                destInput.placeholder = "서비스 권역을 선택해 주세요";
+                return;
+            }
+
+            const center = map.getCenter();
+
+            // Check if center is inside service area
+            const isInside = isPointInPolygon(center, serviceAreaPolygon);
+            updateCenterPin(isInside);
+
+            // If outside service area, don't allow bus stop selection
+            if (!isInside) {
+                currentSelectedStop = null;
+                updateButtonState(false);
+                destInput.value = "";
+                destInput.placeholder = "서비스 지역이 아닙니다";
+                return;
+            }
+
+            const nearest = findNearestStop(center);
+
+            currentSelectedStop = null;
+            updateButtonState(false);
+
+            if (nearest) {
+                const dist = center.distanceTo([nearest.lat, nearest.lng]);
+
+                if (dist < 400) {
+                    isSnapping = true;
+                    currentSelectedStop = nearest;
+                    updateButtonState(true);
+                    destInput.value = nearest.name;
+
+                    map.panTo([nearest.lat, nearest.lng], {
+                        animate: true,
+                        duration: 0.3
+                    });
+                    showToast();
+                } else {
+                    destInput.value = "";
+                    destInput.placeholder = "지도를 움직여 정류장 선택";
+                }
+            } else {
+                destInput.value = "";
+                destInput.placeholder = "지도를 움직여 정류장 선택";
+            }
+        });
+
+        // Initial State
+        setTimeout(() => {
+            map.fire('moveend');
+        }, 500);
+
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,105 @@
+body,
+html {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+}
+
+#map {
+    height: 100%;
+    width: 100%;
+    z-index: 0;
+}
+
+.floating-panel {
+    z-index: 1000;
+}
+
+/* Bus Stop Icon Style */
+/* Bus Stop Icon Style */
+/* Bus Stop Icon Style */
+/* Wrapper: Handles opacity (zoom) but NOT transform (Leaflet handles position) */
+.bus-stop-wrapper {
+    background: transparent;
+    border: none;
+    transition: opacity 0.3s ease-in-out;
+}
+
+/* Inner Image: Handles click scale animation */
+.bus-stop-img {
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+    transition: transform 0.1s;
+    display: block;
+    /* Remove extra space */
+}
+
+/* Apply scale to inner image when wrapper is active */
+.bus-stop-wrapper:active .bus-stop-img {
+    transform: scale(0.9);
+}
+
+
+/* Current Location (Origin) Icon Style */
+.current-location-marker {
+    background-color: white;
+    border: 6px solid #2563EB;
+    /* Blue-600 */
+    border-radius: 50%;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+/* Center Fixed Pin Style */
+#center-pin {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -100%);
+    /* Tip of pin at center */
+    z-index: 500;
+    pointer-events: none;
+    /* Let clicks pass through to map */
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.3));
+    transition: transform 0.1s, opacity 0.3s ease-in-out;
+}
+
+/* Bounce animation when map moves */
+.is-moving #center-pin {
+    transform: translate(-50%, -115%);
+}
+
+/* Button Disabled State Visuals */
+.btn-disabled {
+    background-color: #9CA3AF !important;
+    /* Gray-400 */
+    cursor: not-allowed;
+    box-shadow: none !important;
+}
+
+/* Service Area Tooltip */
+/* Service Area Tooltip */
+/* Service Area Tooltip */
+.leaflet-tooltip.service-area-label {
+    background-color: #ffffff !important;
+    border: 1px solid rgba(0, 0, 0, 0.05) !important;
+    border-radius: 20px !important;
+    /* Pill shape */
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15) !important;
+    color: #111827 !important;
+    /* Gray-900 */
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+    font-weight: 700 !important;
+    font-size: 15px !important;
+    padding: 10px 20px !important;
+    text-align: center !important;
+    white-space: nowrap !important;
+    z-index: 1000 !important;
+    opacity: 1 !important;
+}
+
+/* Remove default Leaflet tooltip arrow */
+.leaflet-tooltip.service-area-label::before {
+    display: none !important;
+}
