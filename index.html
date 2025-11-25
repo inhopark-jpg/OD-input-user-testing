@@ -21,6 +21,12 @@
     <!-- Map -->
     <div id="map"></div>
 
+    <!-- Zoom Level Display -->
+    <div id="zoom-level"
+        class="absolute bottom-0 left-0 bg-white bg-opacity-80 px-2 py-1 text-[10px] text-gray-600 z-[1000] pointer-events-none">
+        Zoom: <span id="zoom-value">15</span>
+    </div>
+
     <!-- FIXED CENTER PIN (Overlay) -->
     <div id="center-pin">
         <svg id="center-pin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#DC2626" stroke="white"
@@ -77,6 +83,10 @@
 
     <!-- Zoom Controls -->
     <div class="floating-panel absolute bottom-28 right-4 flex flex-col gap-2">
+        <button id="my-location-btn"
+            class="w-12 h-12 bg-white text-blue-600 font-bold rounded-xl text-2xl transition-all shadow-lg hover:bg-gray-50 active:scale-95 flex items-center justify-center">
+            <i class="ph-fill ph-navigation-arrow"></i>
+        </button>
         <button id="zoom-in-btn"
             class="w-12 h-12 bg-white text-gray-800 font-bold rounded-xl text-2xl transition-all shadow-lg hover:bg-gray-50 active:scale-95 flex items-center justify-center">
             <i class="ph-bold ph-plus"></i>
@@ -141,8 +151,16 @@
         });
 
         // Zoom Controls
+        const myLocationBtn = document.getElementById('my-location-btn');
         const zoomInBtn = document.getElementById('zoom-in-btn');
         const zoomOutBtn = document.getElementById('zoom-out-btn');
+
+        myLocationBtn.addEventListener('click', () => {
+            map.flyTo(OSONG_CENTER, map.getZoom(), {
+                animate: true,
+                duration: 0.6
+            });
+        });
 
         zoomInBtn.addEventListener('click', () => {
             map.zoomIn();
@@ -216,7 +234,7 @@
                     currentSelectedStop = stop;
                     updateButtonState(true);
 
-                    map.flyTo([stop.lat, stop.lng], 16, {
+                    map.flyTo([stop.lat, stop.lng], map.getZoom(), {
                         animate: true,
                         duration: 0.6
                     });
@@ -267,11 +285,8 @@
                 if (map.getZoom() < 14) {
                     const bounds = boundaryLayer.getBounds();
                     const center = bounds.getCenter();
-                    // Ensure we zoom in to at least 14.5 to show markers/mask
-                    const fitZoom = map.getBoundsZoom(bounds, { padding: [50, 50] });
-                    const targetZoom = Math.max(fitZoom, 14.5);
 
-                    map.flyTo(center, targetZoom, {
+                    map.flyTo(center, 14, {
                         duration: 0.45,
                         animate: true
                     });
@@ -338,7 +353,21 @@
             }
         }
 
-        map.on('zoomend', updateMapVisuals);
+        // Update zoom level display
+        function updateZoomLevel() {
+            const zoomValue = document.getElementById('zoom-value');
+            if (zoomValue) {
+                zoomValue.textContent = map.getZoom();
+            }
+        }
+
+        map.on('zoomend', () => {
+            updateMapVisuals();
+            updateZoomLevel();
+        });
+
+        // Initialize zoom level display
+        updateZoomLevel();
 
 
         function findNearestStop(latlng) {
